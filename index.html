@@ -195,6 +195,7 @@ window.addEventListener('error', e => {
 <div id="drawer">
   <h3>菜 单</h3>
   <div class="sec">设置</div>
+  <div class="setRow"><span>音效</span><div class="toggle" data-key="sound" onclick="game.toggleSetting('sound')"></div></div>
   <div class="setRow"><span>阴影效果</span><div class="toggle" data-key="shadows" onclick="game.toggleSetting('shadows')"></div></div>
   <div class="setRow"><span>主菜单镜头环绕</span><div class="toggle" data-key="autoRotate" onclick="game.toggleSetting('autoRotate')"></div></div>
   <div class="sec">操作</div>
@@ -236,29 +237,69 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 /* =====================================================================
  * 内置关卡
- * tiles: 16 行×16 列。'#'=石墙 'B'=黑柱 'W'=白柱 '.'=场外
+ * tiles: 12 行×12 列。'#'=石墙 'B'=黑柱 'W'=白柱 '.'=场外
  * black/white: 棋子初始 [列,行]；bGoal/wGoal: 光圈 [列,行]
  * ===================================================================== */
 const LEVELS = [
   {
-    name: "第 1 关 · 换位架桥",
+    name: "第 1 关 · 互帮互惠",
     tiles: [
-      "............","............","............",
-      "..########..","..#WBBWBW#..","..#WWWBWW#..",
-      "..#WWWWWW#..","..########..","............",
-      "............","............","............",
+      "............","............","############",
+      "#WWBBW######","###WWW######","#BBBBW######",
+      "#BBWWW######","#BBBB#######","#BBWWB######",
+      "############","............","............",
     ],
-    white: [5, 6], black: [4, 4], wGoal: [7, 6], bGoal: [7, 4],
+    white: [5, 3], black: [5, 8], wGoal: [1, 3], bGoal: [1, 8],
   },
   {
-    name: "第 2 关 · 接力修路",
+    name: "第 2 关 · 对向而行",
     tiles: [
-      "............","............","..#########.",
-      "..#WWWWWWW#.","..#WBBWBBW#.","..#WWWBBWW#.",
-      "..#WWWWWWW#.","..#WWWWWWW#.","..#########.",
-      "............","............","............",
+      "............","............","############",
+      "#WWWBBWWWW##","####WWWWWW##","#BBBBB###W##",
+      "#BB###WWWW##","#BB####BBB##","#BBBBBBWWB##",
+      "############","............","............",
     ],
-    white: [9, 7], black: [8, 4], wGoal: [3, 7], bGoal: [4, 4],
+    white: [9, 3], black: [3, 8], wGoal: [1, 3], bGoal: [9, 8],
+  },
+  {
+    name: "第 3 关 · 接力护送",
+    tiles: [
+      "............","............","############",
+      "#WWBBWWWW###","###BB#BBW###","###BB#WWW###",
+      "###BB#WWW###","###WW#WWW###","###BBBWWB###",
+      "############","............","............",
+    ],
+    white: [8, 3], black: [8, 8], wGoal: [1, 3], bGoal: [5, 8],
+  },
+  {
+    name: "第 4 关 · 三连环",
+    tiles: [
+      "............","............","############",
+      "#WWWBBWWWW##","####WWWWWW##","#BBBBB###W##",
+      "#BB##WWWWW##","#BB##BBB#B##","#BBBBWWWBB##",
+      "############","............","............",
+    ],
+    white: [9, 3], black: [9, 8], wGoal: [1, 3], bGoal: [1, 8],
+  },
+  {
+    name: "第 5 关 · 上下交错",
+    tiles: [
+      "............","............","############",
+      "##W#########","##BWBBBBBBB#","##BWB#####B#",
+      "#WWWWWWW##B#","##W##BBB##B#","##WBBWWWBBB#",
+      "############","............","............",
+    ],
+    white: [2, 8], black: [10, 8], wGoal: [2, 3], bGoal: [3, 8],
+  },
+  {
+    name: "第 6 关 · 首尾双门",
+    tiles: [
+      "............","............","############",
+      "#WWBBWWBBWW#","#W#WW##WWB##","#W#BBBBBBB##",
+      "#WWWWWWWWB##","###BB##BBB##","#BBWWBBWWBB#",
+      "############","............","............",
+    ],
+    white: [1, 3], black: [10, 8], wGoal: [10, 3], bGoal: [1, 8],
   },
 ];
 
@@ -373,6 +414,38 @@ function analyzeSolution(lv, path) {
   return { len: path.length, pushW, pushB, push: pushW + pushB, win: isWin(st) };
 }
 
+/* ===================== 音效（Web Audio 程序化合成，零音频文件） ===================== */
+let audioCtx = null;
+function ensureAudio() {
+  if (!settings.sound) return null;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone(freq, dur, { type = 'sine', vol = 0.15, when = 0, slide = 0 } = {}) {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const t0 = ctx.currentTime + when;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+const SFX = {
+  move:  () => tone(300, 0.07, { type: 'triangle', vol: 0.10, slide: -70 }),   // 轻快落子
+  push:  () => { tone(130, 0.14, { type: 'square', vol: 0.11 });               // 厚重推柱
+                 tone(85, 0.22, { type: 'sine', vol: 0.16, when: 0.02 }); },
+  swap:  () => { tone(420, 0.08, { vol: 0.10 }); tone(560, 0.10, { vol: 0.10, when: 0.09 }); }, // 升降互换
+  bad:   () => tone(105, 0.14, { type: 'sawtooth', vol: 0.08, slide: -25 }),    // 非法
+  undo:  () => tone(520, 0.12, { vol: 0.09, slide: -230 }),                     // 撤销回滑
+  goal:  () => { tone(660, 0.09, { vol: 0.11 }); tone(880, 0.12, { vol: 0.11, when: 0.10 }); }, // 单棋到位
+  win:   () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, { vol: 0.13, when: i * 0.12 })), // 过关琶音
+};
+
 /* ===================== 游戏运行时 ===================== */
 let state, undoStack = [], won = false, builtinIndex = 0, mode = 'play';
 let toastTimer = null;
@@ -406,12 +479,19 @@ function doAction(act) {
   if (!res.ok) {
     shakeT = 1; shakeWho = state.phase;
     setMsg(res.why);
+    SFX.bad();
     undoStack.pop();
   } else {
     if (res.kind === 'push') sync3D.swapPillars(res.from, res.to);
     let hint = '';
-    if (res.kind === 'push') hint = '把升起的柱子推了一格！';
-    else if (res.kind === 'toggle') hint = state.phase === 'B' ? '黑柱降下，白柱升起 → 轮到黑棋' : '白柱降下，黑柱升起 → 轮到白棋';
+    if (res.kind === 'push') { hint = '把升起的柱子推了一格！'; SFX.push(); }
+    else if (res.kind === 'toggle') { hint = state.phase === 'B' ? '黑柱降下，白柱升起 → 轮到黑棋' : '白柱降下，黑柱升起 → 轮到白棋'; SFX.swap(); }
+    else {
+      SFX.move();
+      // 单棋到位提示音（还未全胜时）
+      const p = state[state.phase], goal = state.goals[state.phase];
+      if (p.c === goal[0] && p.r === goal[1]) SFX.goal();
+    }
     // 走上了对面的光圈：立刻提醒，避免"到了却不过关"的困惑
     const p = state[state.phase];
     const oppo = state.phase === 'W' ? state.goals.B : state.goals.W;
@@ -423,7 +503,9 @@ function doAction(act) {
     won = true;
     recordClear(state.level.name);
     document.getElementById('winNext').style.display = builtinIndex + 1 < LEVELS.length ? '' : 'none';
-    setMsg('🎉 过关！'); showWin();
+    setMsg('🎉 过关！');
+    SFX.win();
+    showWin();
   }
 }
 function undo() {
@@ -433,6 +515,7 @@ function undo() {
   won = false; hideWin();
   sync3D.rebuild();
   setMsg('已撤销一步');
+  SFX.undo();
 }
 function checkSolvability() {
   setMsg('正在搜索…');
@@ -838,7 +921,7 @@ function editImport() {
 
 /* ===================== 界面流程：主菜单 / 选关 / 游玩 ===================== */
 let screen = 'menu';   // 'menu' | 'select' | 'game'
-const settings = Object.assign({ shadows: true, autoRotate: true },
+const settings = Object.assign({ shadows: true, autoRotate: true, sound: true },
   JSON.parse(localStorage.getItem('bwz_settings') || '{}'));
 function saveSettings() { localStorage.setItem('bwz_settings', JSON.stringify(settings)); }
 function clearRecords() { try { return JSON.parse(localStorage.getItem('bwz_clears') || '{}'); } catch { return {}; } }
