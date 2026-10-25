@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>黑白柱 · 推箱子plus 3D</title>
+<style>
+  :root { --bg:#16161a; --panel:rgba(31,31,37,.92); --line:#33333c; --fg:#d8d6cd; --dim:#8a8892; --acc:#e8c46a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--fg);
+              font-family:"Microsoft YaHei",system-ui,sans-serif; }
+  canvas { display:block; }
+  #title { position:fixed; left:16px; top:14px; z-index:10; pointer-events:none; }
+  #title h1 { font-size:20px; letter-spacing:3px; text-shadow:0 2px 8px #000; }
+  #title .sub { font-size:11px; color:var(--dim); }
+  #hud { position:fixed; right:14px; top:14px; bottom:14px; width:292px; z-index:10;
+         background:var(--panel); border:1px solid var(--line); border-radius:10px;
+         padding:12px; overflow-y:auto; backdrop-filter:blur(4px); }
+  #hud::-webkit-scrollbar { width:6px; } #hud::-webkit-scrollbar-thumb { background:#3a3a44; border-radius:3px; }
+  .tabs { display:flex; gap:4px; margin-bottom:10px; }
+  .tabs button { flex:1; }
+  .tabs button.on { background:#4a4a58; color:#fff; border-color:#5a5a6a; }
+  .box { border:1px solid var(--line); border-radius:6px; padding:10px; margin-bottom:10px; }
+  .box .label { font-size:12px; color:var(--dim); margin-bottom:6px; }
+  #turnRow { display:flex; gap:10px; align-items:center; }
+  .pawnIcon { width:26px; height:26px; border-radius:50%; border:2px solid; position:relative; flex:none; }
+  .pawnIcon.black { background:#15151a; border-color:#888; }
+  .pawnIcon.white { background:#f5f3ea; border-color:#333; }
+  .pawnIcon .eyeL,.pawnIcon .eyeR { position:absolute; top:8px; width:3px; height:5px; border-radius:2px; }
+  .pawnIcon.black .eyeL,.pawnIcon.black .eyeR { background:#fff; }
+  .pawnIcon.white .eyeL,.pawnIcon.white .eyeR { background:#222; }
+  .pawnIcon .eyeL { left:6px; } .pawnIcon .eyeR { right:6px; }
+  .pawnIcon.locked .eyeL,.pawnIcon.locked .eyeR { height:2px; top:11px; }
+  .pawnIcon.active { box-shadow:0 0 0 3px rgba(232,196,106,.55); }
+  #stats { font-size:13px; color:var(--dim); margin:8px 0; }
+  #msg { font-size:13px; min-height:34px; line-height:1.5; color:var(--acc); margin-bottom:8px; }
+  button { background:#2a2a32; color:var(--fg); border:1px solid var(--line); border-radius:5px;
+           padding:6px 9px; font-size:13px; cursor:pointer; }
+  button:hover { background:#35353f; }
+  button.small { padding:4px 7px; font-size:12px; }
+  .btns { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
+  .penGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:8px; }
+  .penGrid button.on { background:#4a4a58; border-color:#7a7a8c; color:#fff; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  #lvList .item { display:flex; align-items:center; gap:5px; padding:4px 6px; border-radius:4px; font-size:13px; }
+  #lvList .item:hover { background:#2b2b34; }
+  #lvList .item .nm { flex:1; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #ioArea { width:100%; height:70px; background:#17171b; color:#bcbabc; border:1px solid var(--line);
+            border-radius:5px; font-size:11px; padding:5px; resize:vertical; display:none; }
+  .setBox { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 18px; width:320px; }
+  #winOverlay { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center;
+                background:rgba(10,10,14,.66); flex-direction:column; gap:14px; }
+  #winOverlay h2 { font-size:52px; color:var(--acc); letter-spacing:8px; text-shadow:0 4px 24px rgba(0,0,0,.8); }
+  #winOverlay .row { display:flex; gap:10px; }
+  .screen { position:fixed; inset:0; z-index:15; display:none; flex-direction:column; align-items:center;
+            justify-content:center; gap:18px; background:rgba(14,14,18,.32); backdrop-filter:blur(2px); }
+  .bigTitle { font-size:64px; letter-spacing:18px; text-indent:18px; font-weight:700;
+              text-shadow:0 6px 30px rgba(0,0,0,.9); }
+  .bigTitle .b { color:#f5f3ea; } .bigTitle .w { color:#8a8892; }
+  .sub2 { color:var(--dim); letter-spacing:6px; font-size:14px; margin-top:-10px; }
+  .bigBtn { font-size:20px; padding:14px 60px; border-radius:8px; letter-spacing:6px;
+            background:#2c2c36; border:1px solid #4a4a58; }
+  .bigBtn:hover { background:#3a3a48; border-color:#6a6a7c; }
+  .midBtn { font-size:14px; padding:9px 30px; border-radius:7px; letter-spacing:3px;
+            background:transparent; border:1px solid #3c3c46; color:var(--dim); }
+  .midBtn:hover { color:var(--fg); border-color:#5a5a66; }
+  #drawer { position:fixed; left:0; top:0; bottom:0; width:280px; z-index:18;
+            background:rgba(24,24,30,.96); border-right:1px solid var(--line);
+            transform:translateX(-100%); transition:transform .28s ease; padding:20px 18px;
+            overflow-y:auto; backdrop-filter:blur(8px); }
+  #drawer.open { transform:translateX(0); }
+  #drawerMask { position:fixed; inset:0; z-index:17; background:rgba(8,8,12,.35);
+                opacity:0; pointer-events:none; transition:opacity .28s; }
+  #drawerMask.open { opacity:1; pointer-events:auto; }
+  #drawer h3 { letter-spacing:4px; margin:4px 0 14px; }
+  #drawer .sec { font-size:12px; color:var(--dim); margin:14px 0 6px; }
+  #drawer .bigRow { display:block; width:100%; text-align:left; padding:10px 12px; margin:6px 0;
+                    font-size:14px; border-radius:6px; }
+  #toast { position:fixed; left:18px; bottom:18px; z-index:12; max-width:420px;
+           background:rgba(24,24,30,.88); border:1px solid var(--line); border-radius:8px;
+           padding:10px 16px; font-size:13.5px; color:var(--acc); opacity:0;
+           transition:opacity .4s; pointer-events:none; backdrop-filter:blur(4px); }
+  .iconBtn { width:46px; height:46px; border-radius:50%; background:rgba(30,30,38,.8);
+             border:1px solid var(--line); font-size:22px; cursor:pointer; color:var(--fg);
+             display:flex; align-items:center; justify-content:center; }
+  .iconBtn:hover { border-color:#6a6a7c; background:rgba(42,42,52,.9); }
+  #cornerBtns { position:fixed; top:16px; right:16px; z-index:19; display:flex;
+                flex-direction:column; gap:10px; }
+  .overlayCard { width:420px; max-width:92vw; background:var(--panel); border:1px solid var(--line);
+                 border-radius:12px; padding:22px 26px; }
+  .overlayCard h3 { letter-spacing:4px; margin-bottom:12px; font-size:18px; }
+  .overlayCard .row { text-align:center; margin-top:14px; }
+  .overlayCard .hr { line-height:2; font-size:13.5px; color:var(--dim); }
+  .overlayCard .hr b { color:var(--fg); }
+  #helpOverlay { position:fixed; inset:0; z-index:22; display:none; align-items:center;
+                 justify-content:center; background:rgba(10,10,14,.7); }
+  .setBox { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 18px; width:320px; }
+  .setRow { display:flex; align-items:center; justify-content:space-between; padding:7px 0; font-size:14px; }
+  .toggle { width:42px; height:22px; border-radius:11px; background:#33333c; border:1px solid var(--line);
+            position:relative; cursor:pointer; transition:background .2s; }
+  .toggle::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+                   background:#8a8892; transition:all .2s; }
+  .toggle.on { background:#4a4030; } .toggle.on::after { left:22px; background:var(--acc); }
+  .menuHelp { color:var(--dim); font-size:12px; line-height:1.8; text-align:center; }
+  .menuHelp b { color:var(--fg); }
+  #selectScreen h2 { font-size:30px; letter-spacing:8px; }
+  #levelCards { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; max-width:720px; }
+  .lvCard { width:200px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+            padding:18px 16px; cursor:pointer; transition:transform .15s, border-color .15s; }
+  .lvCard:hover { transform:translateY(-4px); border-color:#6a6a7c; }
+  .lvCard .lvNum { font-size:34px; color:#5a5a66; font-weight:700; }
+  .lvCard .lvName { font-size:16px; margin:8px 0 4px; }
+  .lvCard .lvClear { font-size:12px; color:var(--acc); min-height:18px; }
+  .lvCard .lvMeta { font-size:12px; color:var(--dim); }
+  .backBtn { position:absolute; top:22px; left:22px; }
+  #loading { position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+             background:var(--bg); color:var(--dim); font-size:14px; letter-spacing:2px; }
+</style>
+</head>
+<body>
+<div id="loading">正在加载 3D 引擎…</div>
+<script>
+window.addEventListener('error', e => {
+  const el = document.getElementById('loading');
+  if (el) el.textContent = '加载出错：' + e.message + ' @ ' + (e.filename || '').split('/').pop() + ':' + (e.lineno || '?');
+});
+</script>
+<div id="toast"></div>
+<div id="cornerBtns">
+  <button class="iconBtn" title="玩法公告" onclick="game.showHelp()">?</button>
+</div>
+
+<div id="hud">
+  <div id="panelEdit" style="display:none">
+    <div class="btns">
+      <button onclick="game.exitEditor()" style="flex:1">✓ 完成编辑，返回游玩</button>
+    </div>
+    <div class="box">
+      <div class="label">画笔（点击棋盘格子放置）</div>
+      <div class="penGrid" id="penGrid">
+        <button data-p="B" class="on"><span class="sw" style="background:#5c5c69"></span>黑柱</button>
+        <button data-p="W"><span class="sw" style="background:#eee9da"></span>白柱</button>
+        <button data-p="#"><span class="sw" style="background:#4a4a52"></span>石墙</button>
+        <button data-p="."><span class="sw" style="background:#202024"></span>擦除</button>
+        <button data-p="wS"><span class="sw" style="background:#f5f3ea;border-radius:50%"></span>白棋</button>
+        <button data-p="bS"><span class="sw" style="background:#15151a;border-radius:50%;border:1px solid #777"></span>黑棋</button>
+        <button data-p="wG"><span class="sw" style="background:transparent;border:2px solid #f5f3ea;border-radius:50%"></span>白圈</button>
+        <button data-p="bG"><span class="sw" style="background:transparent;border:2px solid #333;border-radius:50%"></span>黑圈</button>
+      </div>
+      <div class="btns">
+        <button onclick="game.editValidate()">验证</button>
+        <button onclick="game.editPlay()">▶ 试玩</button>
+        <button onclick="game.editLoadCurrent()">载入当前关</button>
+        <button onclick="game.editClear()">清空</button>
+      </div>
+    </div>
+    <div class="box">
+      <div class="label">保存到浏览器（自定义关卡）</div>
+      <div class="btns">
+        <input id="lvName" placeholder="关卡名" style="flex:1;background:#17171b;border:1px solid var(--line);color:var(--fg);border-radius:5px;padding:5px 8px;font-size:13px">
+        <button onclick="game.editSave()">保存</button>
+      </div>
+    </div>
+    <div class="box">
+      <div class="label">分享（复制 JSON 给朋友导入）</div>
+      <div class="btns">
+        <button onclick="game.editExport()">导出到下方</button>
+        <button onclick="game.editImport()">从下方导入</button>
+      </div>
+      <textarea id="ioArea" placeholder="关卡 JSON…"></textarea>
+    </div>
+    <div style="font-size:12px;color:var(--dim);line-height:1.7">提示：活动区请用黑白柱填满（不留空格）；白棋/黑棋起点与各自光圈必须放在同色柱上，点「验证」会检查并可解性测试。</div>
+  </div>
+</div>
+
+<div id="winOverlay">
+  <h2>过 关 !</h2>
+  <div class="row">
+    <button id="winNext" onclick="game.nextLevel()">下一关 ➜</button>
+    <button onclick="game.toSelect()">返回选关</button>
+  </div>
+</div>
+
+<div id="menuScreen" class="screen">
+  <div class="bigTitle"><span class="b">黑</span> <span class="w">白</span> <span class="b">柱</span></div>
+  <button class="bigBtn" onclick="game.startSelect()">开 始 游 戏</button>
+</div>
+
+<div id="selectScreen" class="screen">
+  <button class="backBtn" onclick="game.showScreen('menu')">← 返回</button>
+  <h2>选择关卡</h2>
+  <div id="levelCards"></div>
+</div>
+
+<div id="drawerMask" onclick="game.closeDrawer()"></div>
+<div id="drawer">
+  <h3>菜 单</h3>
+  <div class="sec">设置</div>
+  <div class="setRow"><span>阴影效果</span><div class="toggle" data-key="shadows" onclick="game.toggleSetting('shadows')"></div></div>
+  <div class="setRow"><span>主菜单镜头环绕</span><div class="toggle" data-key="autoRotate" onclick="game.toggleSetting('autoRotate')"></div></div>
+  <div class="sec">操作</div>
+  <button class="bigRow" onclick="game.closeDrawer();game.showHelp()">❔ 玩法公告</button>
+  <button class="bigRow" onclick="game.closeDrawer();game.restart()">↻ 重开本关</button>
+  <button class="bigRow" onclick="game.closeDrawer();game.toSelect()">☰ 返回选关</button>
+  <button class="bigRow" onclick="game.closeDrawer();game.showScreen('menu')">⌂ 返回主菜单</button>
+  <button class="bigRow" onclick="game.closeDrawer()" style="margin-top:16px;color:var(--dim)">✕ 关闭（Esc）</button>
+</div>
+
+<div id="helpOverlay" onclick="game.hideHelp()">
+  <div class="overlayCard" onclick="event.stopPropagation()">
+    <h3>玩 法 公 告</h3>
+    <div class="hr">
+      <b>W A S D / 方向键</b>：移动 / 推柱<br>
+      <b>空格</b>：切换黑白棋（全场柱子升降互换）<br>
+      <b>R</b>：撤销 · <b>Enter</b>：重开本关 · <b>N</b>：过关后下一关 · <b>Esc</b>：返回选关<br>
+      <b>鼠标拖拽</b>：旋转视角 · <b>滚轮</b>：缩放<br>
+      ────────────────<br>
+      棋子只能走<b>同色且降下</b>的柱子；<br>
+      推升起的柱子 = 它与前方降下的柱子<b>换位</b>，棋子跟进一格，帮对面棋子铺路；<br>
+      <b>光圈与棋子同色</b>（黑环=黑棋目标，白环=白棋目标）；<br>
+      黑白棋都站上各自光圈即过关。
+    </div>
+    <div class="row"><button onclick="game.hideHelp()">知道了</button></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "./three.module.js",
+    "three/addons/controls/OrbitControls.js": "./OrbitControls.js"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* =====================================================================
+ * 内置关卡
+ * tiles: 16 行×16 列。'#'=石墙 'B'=黑柱 'W'=白柱 '.'=场外
+ * black/white: 棋子初始 [列,行]；bGoal/wGoal: 光圈 [列,行]
+ * ===================================================================== */
+const LEVELS = [
+  {
+    name: "第 1 关 · 换位架桥",
+    tiles: [
+      "............","............","............",
+      "..########..","..#WBBWBW#..","..#WWWBWW#..",
+      "..#WWWWWW#..","..########..","............",
+      "............","............","............",
+    ],
+    white: [5, 6], black: [4, 4], wGoal: [7, 6], bGoal: [7, 4],
+  },
+  {
+    name: "第 2 关 · 接力修路",
+    tiles: [
+      "............","............","..#########.",
+      "..#WWWWWWW#.","..#WBBWBBW#.","..#WWWBBWW#.",
+      "..#WWWWWWW#.","..#WWWWWWW#.","..#########.",
+      "............","............","............",
+    ],
+    white: [9, 7], black: [8, 4], wGoal: [3, 7], bGoal: [4, 4],
+  },
+];
+
+/* ===================== 规则引擎（纯逻辑） =====================
+ * state = { phase:'W'|'B', B/W:{c,r}, grid:16×16(null|{color}), tiles, goals, moves }
+ * 柱子升降由相位推导：黑柱升起 ⟺ phase==='W'
+ * ================================================================ */
+const N = 12;
+const DIRS = { U:[0,-1], D:[0,1], L:[-1,0], R:[1,0] };
+
+function initStateFrom(lv) {
+  const grid = lv.tiles.map(row => row.split('').map(ch =>
+    ch === 'B' ? { color: 'B' } : ch === 'W' ? { color: 'W' } : null));
+  const pos = p => p ? { c: p[0], r: p[1] } : { c: -99, r: -99 }; // 编辑中未放置 → 场外
+  return {
+    level: lv, phase: 'W',
+    B: pos(lv.black), W: pos(lv.white),
+    grid, tiles: lv.tiles,
+    goals: { B: lv.bGoal || [-99, -99], W: lv.wGoal || [-99, -99] },
+    moves: 0,
+  };
+}
+const isWall = (st, c, r) => c < 0 || r < 0 || c >= N || r >= N || st.tiles[r][c] === '#';
+const pillarAt = (st, c, r) => st.grid[r][c];
+const isRaised = (st, col) => col.color === 'B' ? st.phase === 'W' : st.phase === 'B';
+const isWin = st => st.B.c === st.goals.B[0] && st.B.r === st.goals.B[1]
+                 && st.W.c === st.goals.W[0] && st.W.r === st.goals.W[1];
+
+function tryMove(st, dir) {
+  const [dx, dy] = DIRS[dir];
+  const p = st[st.phase];
+  const tc = p.c + dx, tr = p.r + dy;
+  if (isWall(st, tc, tr)) return { ok: false, why: '撞墙了' };
+  const col = pillarAt(st, tc, tr);
+  if (!col) return { ok: false, why: '那是空地，走不过去' };
+  if (isRaised(st, col)) {
+    if ((st.B.c === tc && st.B.r === tr) || (st.W.c === tc && st.W.r === tr))
+      return { ok: false, why: '那根柱子上站着棋子，推不动' };
+    const nc = tc + dx, nr = tr + dy;
+    if (isWall(st, nc, nr)) return { ok: false, why: '柱子被石墙挡住，推不动' };
+    const front = pillarAt(st, nc, nr);
+    if (!front) return { ok: false, why: '前方没有可换位的柱子，推不动' };
+    if (isRaised(st, front)) return { ok: false, why: '前方的柱子也是升起的，换不了位' };
+    if ((st.B.c === nc && st.B.r === nr) || (st.W.c === nc && st.W.r === nr))
+      return { ok: false, why: '柱子前方有棋子，推不动' };
+    st.grid[tr][tc] = front;
+    st.grid[nr][nc] = col;
+    p.c = tc; p.r = tr;
+    st.moves++;
+    return { ok: true, kind: 'push', from: [tc, tr], to: [nc, nr] };
+  }
+  if (col.color !== st.phase) return { ok: false, why: '不能走对面颜色的柱子' };
+  p.c = tc; p.r = tr;
+  st.moves++;
+  return { ok: true, kind: 'move' };
+}
+function togglePhase(st) {
+  st.phase = st.phase === 'W' ? 'B' : 'W';
+  st.moves++;
+  return { ok: true, kind: 'toggle' };
+}
+function snapshot(st) {
+  return { phase: st.phase, B: { ...st.B }, W: { ...st.W },
+    grid: st.grid.map(row => row.map(cell => cell ? { color: cell.color } : null)), moves: st.moves };
+}
+function restore(st, snap) {
+  st.phase = snap.phase; st.B = { ...snap.B }; st.W = { ...snap.W };
+  st.grid = snap.grid.map(row => row.map(cell => cell ? { color: cell.color } : null));
+  st.moves = snap.moves;
+}
+
+/* ===================== BFS 求解（带预算，供验证与生成器） ===================== */
+function solveState(s0, budget = {}) {
+  const maxStates = budget.maxStates ?? 250000;
+  const deadline = budget.timeMs ? performance.now() + budget.timeMs : Infinity;
+  const key = st => st.phase + st.B.c + ',' + st.B.r + ',' + st.W.c + ',' + st.W.r + ',' +
+    st.grid.map(row => row.map(c => c ? c.color : '-').join('')).join('');
+  const clone = st => ({ phase: st.phase, B: { ...st.B }, W: { ...st.W }, tiles: st.tiles, goals: st.goals,
+    grid: st.grid.map(row => row.slice()), moves: st.moves });
+  const k0 = key(s0);
+  const seen = new Map([[k0, null]]);
+  const queue = [s0], keys = [k0];
+  let head = 0;
+  while (head < queue.length) {
+    if (seen.size > maxStates || performance.now() > deadline) return 'LIMIT';
+    const st = queue[head], k = keys[head]; head++;
+    if (isWin(st)) {
+      const path = []; let cur = k;
+      while (cur !== k0) { const e = seen.get(cur); path.push(e.act); cur = e.prev; }
+      return path.reverse();
+    }
+    for (const act of ['U', 'D', 'L', 'R', 'T']) {
+      const st2 = clone(st);
+      if (act === 'T') togglePhase(st2);
+      else if (!tryMove(st2, act).ok) continue;
+      const k2 = key(st2);
+      if (seen.has(k2)) continue;
+      seen.set(k2, { act, prev: k });
+      queue.push(st2); keys.push(k2);
+    }
+  }
+  return null;
+}
+function analyzeSolution(lv, path) {
+  const st = initStateFrom(lv);
+  let pushW = 0, pushB = 0;
+  for (const a of path) {
+    const who = st.phase;
+    const r = a === 'T' ? togglePhase(st) : tryMove(st, a);
+    if (r.kind === 'push') (who === 'W' ? pushW++ : pushB++);
+  }
+  return { len: path.length, pushW, pushB, push: pushW + pushB, win: isWin(st) };
+}
+
+/* ===================== 游戏运行时 ===================== */
+let state, undoStack = [], won = false, builtinIndex = 0, mode = 'play';
+let toastTimer = null;
+function setMsg(t) {
+  const el = document.getElementById('toast');
+  el.textContent = t;
+  el.style.opacity = t ? '1' : '0';
+  clearTimeout(toastTimer);
+  if (t) toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2800);
+}
+
+function loadLevelObj(lv) {
+  currentLevel = lv;
+  state = initStateFrom(lv);
+  undoStack = []; won = false;
+  sync3D.rebuild();
+  hideWin();
+}
+function loadBuiltin(i) { builtinIndex = (i + LEVELS.length) % LEVELS.length; loadLevelObj(LEVELS[builtinIndex]); }
+function restart() { loadLevelObj(state.level); }
+function switchLevel(d) { loadBuiltin(builtinIndex + d); }
+
+function doAction(act) {
+  if (screen !== 'game' || mode !== 'play' || (won && act !== 'N')) return;
+  if (drawerOpen) return;  // 抽屉打开时不接受移动指令
+  undoStack.push(snapshot(state));
+  if (ROT[act] !== undefined) pawn3D[state.phase].rotT = ROT[act]; // 棋子面向移动方向（切换等无方向动作不转）
+  let res;
+  if (act === 'T') res = togglePhase(state);
+  else res = tryMove(state, act);
+  if (!res.ok) {
+    shakeT = 1; shakeWho = state.phase;
+    setMsg(res.why);
+    undoStack.pop();
+  } else {
+    if (res.kind === 'push') sync3D.swapPillars(res.from, res.to);
+    let hint = '';
+    if (res.kind === 'push') hint = '把升起的柱子推了一格！';
+    else if (res.kind === 'toggle') hint = state.phase === 'B' ? '黑柱降下，白柱升起 → 轮到黑棋' : '白柱降下，黑柱升起 → 轮到白棋';
+    // 走上了对面的光圈：立刻提醒，避免"到了却不过关"的困惑
+    const p = state[state.phase];
+    const oppo = state.phase === 'W' ? state.goals.B : state.goals.W;
+    if (p.c === oppo[0] && p.r === oppo[1])
+      hint = `⚠️ 这里是${state.phase === 'W' ? '黑' : '白'}棋的目标（${state.phase === 'W' ? '黑' : '白'}色环），不是你的目标`;
+    setMsg(hint);
+  }
+  if (isWin(state)) {
+    won = true;
+    recordClear(state.level.name);
+    document.getElementById('winNext').style.display = builtinIndex + 1 < LEVELS.length ? '' : 'none';
+    setMsg('🎉 过关！'); showWin();
+  }
+}
+function undo() {
+  if (screen !== 'game' || mode !== 'play') return;
+  if (!undoStack.length) { setMsg('没有可撤销的操作了'); return; }
+  restore(state, undoStack.pop());
+  won = false; hideWin();
+  sync3D.rebuild();
+  setMsg('已撤销一步');
+}
+function checkSolvability() {
+  setMsg('正在搜索…');
+  setTimeout(() => {
+    const t0 = performance.now();
+    const res = solveState(initStateFrom(state.level), { timeMs: 2500 });
+    const ms = Math.round(performance.now() - t0);
+    if (res === 'LIMIT') setMsg('状态空间太大，搜索中止');
+    else if (res) { const a = analyzeSolution(state.level, res); setMsg(`✅ 可解，最短 ${res.length} 步（白推${a.pushW}次·黑推${a.pushB}次，${ms}ms）`); }
+    else setMsg('❌ 无可解路径，请调整布局');
+  }, 30);
+}
+function showWin() { document.getElementById('winOverlay').style.display = 'flex'; }
+function hideWin() { document.getElementById('winOverlay').style.display = 'none'; }
+
+/* ===================== three.js 3D 场景 ===================== */
+const CELL = 1, H_LOW = 0.22, H_HIGH = 1.1;
+const COL = { bg: 0x16161a, base: 0x1b1b1f, cellA: 0x242429, cellB: 0x1f1f24,
+  blackUp: 0x6e6e7c, blackDown: 0x5a5a68, whiteUp: 0xf2efe6, whiteDown: 0xd9d6cc,
+  wall: 0x3c3c44, pawnB: 0x15151a, pawnW: 0xf5f3ea, gold: 0xe8c46a };
+const wx = c => c - N / 2 + 0.5, wz = r => r - N / 2 + 0.5;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(COL.bg);
+scene.fog = new THREE.Fog(COL.bg, 20, 44);
+
+// 透视相机：32° 窄视野 + 拉远，减小透视变形
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 120);
+camera.position.set(0, 34, 17); // 初始=主菜单远景相机
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 8; controls.maxDistance = 48;
+controls.maxPolarAngle = Math.PI * 0.46; controls.minPolarAngle = Math.PI * 0.12;
+controls.enablePan = false;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const sun = new THREE.DirectionalLight(0xfff2e0, 1.5);
+sun.position.set(11, 19, 8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -9; sun.shadow.camera.right = 9;
+sun.shadow.camera.top = 9; sun.shadow.camera.bottom = -9;
+sun.shadow.camera.far = 40;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x9aa5c0, 0.35);
+fill.position.set(-9, 10, -7);
+scene.add(fill);
+
+// 底座 + 棋盘格（InstancedMesh）
+const baseMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(N + 1.4, 0.6, N + 1.4),
+  new THREE.MeshStandardMaterial({ color: COL.base, roughness: 0.95 }));
+baseMesh.position.y = -0.32;
+baseMesh.receiveShadow = true;
+scene.add(baseMesh);
+const cellGeo = new THREE.BoxGeometry(0.98, 0.05, 0.98);
+const cellMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
+const cells = new THREE.InstancedMesh(cellGeo, cellMat, N * N);
+{
+  const m = new THREE.Matrix4(), colA = new THREE.Color(COL.cellA), colB = new THREE.Color(COL.cellB);
+  let i = 0;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    m.setPosition(wx(c), 0.025, wz(r));
+    cells.setMatrixAt(i, m);
+    cells.setColorAt(i, (c + r) % 2 ? colA : colB);
+    i++;
+  }
+  cells.receiveShadow = true;
+  scene.add(cells);
+}
+
+// 柱子 mesh 池 + 槽位（换位时槽位互换 mesh，实现滑动动画）
+const pillarGeo = new THREE.BoxGeometry(0.84, 1, 0.84);
+const cellPillar = Array.from({ length: N }, () => Array(N).fill(null)); // 格子 → mesh
+const pillarPool = [];
+function acquirePillar(color) {
+  let m = pillarPool.find(p => !p.visible);
+  if (!m) {
+    m = new THREE.Mesh(pillarGeo, new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+    m.castShadow = true; m.receiveShadow = true;
+    scene.add(m); pillarPool.push(m);
+  }
+  m.visible = true;
+  m.userData.color = color;
+  return m;
+}
+// 石墙 mesh 池（静态，无动画）
+const wallGeo = new THREE.BoxGeometry(0.94, 0.52, 0.94);
+const wallMat = new THREE.MeshStandardMaterial({ color: COL.wall, roughness: 0.9 });
+const cellWall = Array.from({ length: N }, () => Array(N).fill(null));
+const wallPool = [];
+function acquireWall() {
+  let m = wallPool.find(p => !p.visible);
+  if (!m) { m = new THREE.Mesh(wallGeo, wallMat); m.castShadow = true; m.receiveShadow = true; scene.add(m); wallPool.push(m); }
+  m.visible = true; return m;
+}
+
+// 棋子（球 + 眼睛 + 脚下活跃光环）
+function makePawn(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18),
+    new THREE.MeshStandardMaterial({ color: color === 'B' ? COL.pawnB : COL.pawnW, roughness: 0.35 }));
+  body.castShadow = true;
+  g.add(body);
+  const eyeMat = new THREE.MeshStandardMaterial({ color: color === 'B' ? 0xffffff : 0x222222, roughness: 0.3 });
+  const eyes = [];
+  for (const ex of [-0.13, 0.13]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), eyeMat);
+    e.position.set(ex, 0.09, 0.29);
+    g.add(e); eyes.push(e);
+  }
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.46, 32),
+    new THREE.MeshBasicMaterial({ color: COL.gold, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = -0.3;
+  g.add(ring);
+  scene.add(g);
+  return { group: g, eyes, ring, dc: 0, dr: 0, dh: 0, rot: 0, rotT: 0 };
+}
+const pawn3D = { B: makePawn('B'), W: makePawn('W') };
+let shakeT = 0, shakeWho = null;
+
+// 光圈（主环=对应棋子颜色，外描边=对比色，深色底上保证可见）
+function makeGoalRing() {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.42, 36),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.95 }));
+  ring.rotation.x = -Math.PI / 2;
+  const outline = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.5, 36),
+    new THREE.MeshBasicMaterial({ color: 0x15151a, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }));
+  outline.rotation.x = -Math.PI / 2;
+  const core = new THREE.Mesh(new THREE.CircleGeometry(0.09, 16),
+    new THREE.MeshBasicMaterial({ color: 0x15151a, side: THREE.DoubleSide }));
+  core.rotation.x = -Math.PI / 2;
+  g.add(ring); g.add(outline); g.add(core);
+  scene.add(g);
+  return { group: g, ring, outline, core };
+}
+const goal3D = { B: makeGoalRing(), W: makeGoalRing() };
+
+const sync3D = {
+  rebuild() { // 全量重建（瞬移），用于载入/撤销/编辑
+    for (const row of cellPillar) row.fill(null);
+    for (const p of pillarPool) p.visible = false;
+    for (const row of cellWall) row.fill(null);
+    for (const w of wallPool) w.visible = false;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (state.tiles[r][c] === '#') {
+        const m = acquireWall();
+        m.position.set(wx(c), 0.26, wz(r));
+        cellWall[r][c] = m;
+      }
+      const col = state.grid[r][c];
+      if (col) {
+        const m = acquirePillar(col.color);
+        const h = isRaised(state, col) ? H_HIGH : H_LOW;
+        m.userData.dc = c; m.userData.dr = r; m.userData.dh = h;
+        m.scale.y = h; m.position.set(wx(c), h / 2, wz(r));
+        cellPillar[r][c] = m;
+      }
+    }
+    for (const who of ['B', 'W']) {
+      const p = pawn3D[who];
+      const inBoard = state[who].c >= 0;
+      p.group.visible = inBoard;
+      p.dc = state[who].c; p.dr = state[who].r; p.dh = this._pawnH(who);
+      p.group.position.set(wx(p.dc), p.dh + 0.34, wz(p.dr));
+    }
+    for (const who of ['B', 'W']) {
+      const g = state.goals[who], gr = goal3D[who];
+      gr.group.visible = g[0] >= 0;
+      gr.group.position.set(wx(g[0]), 0.06, wz(g[1]));
+      // 主环与棋子同色（黑光圈=黑环），外描边与芯用对比色
+      const mainC = who === 'B' ? 0x2a2a33 : 0xf5f3ea;
+      const edgeC = who === 'B' ? 0xf5f3ea : 0x15151a;
+      gr.ring.material.color.set(mainC);
+      gr.outline.material.color.set(edgeC);
+      gr.core.material.color.set(who === 'B' ? 0xf5f3ea : 0x15151a);
+    }
+  },
+  swapPillars(from, to) { // 换位：槽位互换 mesh，目标位置变化后自动滑动
+    const [fc, fr] = from, [tc, tr] = to;
+    const a = cellPillar[fr][fc], b = cellPillar[tr][tc];
+    cellPillar[fr][fc] = b; cellPillar[tr][tc] = a;
+  },
+  _pawnH(who) {
+    const s = state[who];
+    if (s.c < 0 || s.r < 0) return H_LOW;
+    const col = state.grid[s.r][s.c];
+    return col && isRaised(state, col) ? H_HIGH : H_LOW;
+  },
+};
+
+const _cUp = new THREE.Color(), _cDown = new THREE.Color();
+function animate(t) {
+  requestAnimationFrame(animate);
+  controls.update();
+  const k = 0.16;
+  // 柱子：位置/高度/颜色 缓动
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const m = cellPillar[r][c];
+    if (!m) continue;
+    const col = state.grid[r][c];
+    const black = m.userData.color === 'B';
+    const th = col && isRaised(state, col) ? H_HIGH : H_LOW;
+    const u = m.userData;
+    u.dh += (th - u.dh) * k;
+    u.dc += (c - u.dc) * k * 1.4;
+    u.dr += (r - u.dr) * k * 1.4;
+    m.scale.y = Math.max(u.dh, 0.02);
+    m.position.set(wx(u.dc), u.dh / 2, wz(u.dr));
+    _cUp.set(black ? COL.blackUp : COL.whiteUp);
+    _cDown.set(black ? COL.blackDown : COL.whiteDown);
+    m.material.color.lerpColors(_cDown, _cUp, (u.dh - H_LOW) / (H_HIGH - H_LOW));
+  }
+  // 棋子：位置/朝向/高度 缓动 + 活跃光环与闭眼
+  for (const who of ['B', 'W']) {
+    const p = pawn3D[who], s = state[who];
+    p.dc += (s.c - p.dc) * k * 1.4;
+    p.dr += (s.r - p.dr) * k * 1.4;
+    p.dh += (sync3D._pawnH(who) - p.dh) * k;
+    let px = wx(p.dc);
+    if (shakeT > 0 && shakeWho === who) px += Math.sin(t * 0.09) * 0.06 * shakeT;
+    p.group.position.set(px, p.dh + 0.36, wz(p.dr));
+    p.rot += (p.rotT - p.rot) * 0.2;
+    p.group.rotation.y = p.rot;
+    const active = state.phase === who && !won && mode === 'play';
+    p.ring.visible = active;
+    if (active) {
+      const pulse = 1 + Math.sin(t * 0.005) * 0.1;
+      p.ring.scale.set(pulse, pulse, 1);
+      p.ring.material.opacity = 0.65 + Math.sin(t * 0.005) * 0.25;
+    }
+    const closed = !active;
+    for (const e of p.eyes) e.scale.y += ((closed ? 0.12 : 1) - e.scale.y) * 0.25;
+  }
+  if (shakeT > 0) shakeT -= 0.05;
+  // 光圈：跟随柱高 + 脉动
+  for (const who of ['B', 'W']) {
+    const g = state.goals[who], gr = goal3D[who];
+    if (g[0] < 0 || g[1] < 0) continue;
+    const m = cellPillar[g[1]][g[0]];
+    const h = m ? m.userData.dh : 0;
+    gr.group.position.y = h + 0.04;
+    const pulse = 1 + Math.sin(t * 0.004) * 0.14;
+    gr.ring.scale.set(pulse, pulse, 1);
+  }
+  renderer.render(scene, camera);
+}
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// 移动朝向（棋子面向移动方向；眼睛默认朝 +z，绕 Y 轴正角转向 +x）
+const ROT = { U: Math.PI, D: 0, L: -Math.PI / 2, R: Math.PI / 2 };
+const KEYMAP = { KeyW: 'U', ArrowUp: 'U', KeyS: 'D', ArrowDown: 'D',
+                 KeyA: 'L', ArrowLeft: 'L', KeyD: 'R', ArrowRight: 'R' };
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (screen === 'menu') {                        // 主菜单：Esc 打开设置抽屉
+    if (e.code === 'Escape') { e.preventDefault(); toggleDrawer(); }
+    return;
+  }
+  if (screen !== 'game') {                        // 选关界面：Esc 返回主菜单
+    if (e.code === 'Escape') showScreen('menu');
+    return;
+  }
+  if (e.code === 'Escape') { e.preventDefault(); toggleDrawer(); return; } // Esc = 设置抽屉
+  if (drawerOpen) return;                     // 抽屉打开时不响应游戏按键
+  if (KEYMAP[e.code]) {
+    e.preventDefault();
+    doAction(KEYMAP[e.code]);
+  }
+  else if (e.code === 'Space') { e.preventDefault(); doAction('T'); }
+  else if (e.code === 'KeyR') { e.preventDefault(); undo(); }
+  else if (e.code === 'Enter') { e.preventDefault(); if (mode === 'play') restart(); }
+  else if (e.code === 'KeyN') { e.preventDefault(); if (won) nextLevel(); }
+  else if (e.code === 'KeyE') { e.preventDefault(); setMode(mode === 'edit' ? 'play' : 'edit'); }
+});
+
+/* ===================== 编辑器 ===================== */
+let editData = null;   // {tiles[16][16字符], white, black, wGoal, bGoal}
+let pen = 'B';
+function blankEdit() {
+  return {
+    tiles: Array.from({ length: N }, () => Array(N).fill('.')),
+    white: null, black: null, wGoal: null, bGoal: null,
+  };
+}
+function editFromLevel(lv) {
+  return {
+    tiles: lv.tiles.map(row => row.split('')),
+    white: [...lv.white], black: [...lv.black], wGoal: [...lv.wGoal], bGoal: [...lv.bGoal],
+  };
+}
+function editToLevel(name) {
+  return {
+    name,
+    tiles: editData.tiles.map(row => row.join('')),
+    white: editData.white, black: editData.black, wGoal: editData.wGoal, bGoal: editData.bGoal,
+  };
+}
+function editPreviewState() { // 编辑内容的预览棋局（棋子放起点，相位 W）
+  return initStateFrom(editToLevel('编辑预览'));
+}
+function editApply(c, r) {
+  const t = editData.tiles;
+  if (pen === 'B' || pen === 'W' || pen === '#') t[r][c] = pen;
+  else if (pen === '.') {
+    t[r][c] = '.';
+    for (const k of ['white', 'black', 'wGoal', 'bGoal'])
+      if (editData[k] && editData[k][0] === c && editData[k][1] === r) editData[k] = null;
+  }
+  else if (pen === 'wS') editData.white = [c, r];
+  else if (pen === 'bS') editData.black = [c, r];
+  else if (pen === 'wG') editData.wGoal = [c, r];
+  else if (pen === 'bG') editData.bGoal = [c, r];
+  state = editPreviewState();
+  sync3D.rebuild();
+}
+// 射线拾取
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+let downPos = null;
+renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downPos || mode !== 'edit') return;
+  const dx = e.clientX - downPos[0], dy = e.clientY - downPos[1];
+  downPos = null;
+  if (dx * dx + dy * dy > 25) return; // 拖拽视角，不算点击
+  raycaster.setFromCamera(new THREE.Vector2(
+    (e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+  const hit = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(groundPlane, hit)) return;
+  const c = Math.floor(hit.x + N / 2), r = Math.floor(hit.z + N / 2);
+  if (c >= 0 && r >= 0 && c < N && r < N) editApply(c, r);
+});
+function editValidate() {
+  if (!editData.white || !editData.black || !editData.wGoal || !editData.bGoal)
+    return setMsg('缺少起点或光圈：请用画笔放置白棋/黑棋/白圈/黑圈');
+  const t = editData.tiles;
+  const ok = (pos, color) => t[pos[1]][pos[0]] === color;
+  if (!ok(editData.white, 'W')) return setMsg('白棋起点必须放在白柱上');
+  if (!ok(editData.black, 'B')) return setMsg('黑棋起点必须放在黑柱上');
+  if (!ok(editData.wGoal, 'W')) return setMsg('白光圈必须放在白柱上');
+  if (!ok(editData.bGoal, 'B')) return setMsg('黑光圈必须放在黑柱上');
+  setMsg('结构合法，正在搜索可解性…');
+  setTimeout(() => {
+    const lv = editToLevel('编辑验证');
+    const res = solveState(initStateFrom(lv), { timeMs: 2500 });
+    if (res === 'LIMIT') setMsg('状态空间太大，搜索中止');
+    else if (res) { const a = analyzeSolution(lv, res); setMsg(`✅ 可解，最短 ${res.length} 步（白推${a.pushW}·黑推${a.pushB}）`); }
+    else setMsg('❌ 无可解路径，请调整布局');
+  }, 30);
+}
+function editPlay() {
+  if (!editData.white || !editData.black || !editData.wGoal || !editData.bGoal)
+    return setMsg('请先放置完整的起点与光圈（或点「验证」检查）');
+  setMode('play');
+  loadLevelObj(editToLevel('自定义 · ' + (document.getElementById('lvName').value || '未命名')));
+  resetCamera();
+}
+function editLoadCurrent() { editData = editFromLevel(state.level); state = editPreviewState(); sync3D.rebuild(); setMsg('已载入当前关卡到编辑器'); }
+function editClear() { editData = blankEdit(); state = editPreviewState(); sync3D.rebuild(); setMsg('编辑器已清空'); }
+function customLevels() { try { return JSON.parse(localStorage.getItem('bwz_custom') || '[]'); } catch { return []; } }
+function editSave() {
+  const name = document.getElementById('lvName').value.trim() || ('自定义 ' + new Date().toLocaleString());
+  const list = customLevels();
+  list.push(editToLevel(name));
+  localStorage.setItem('bwz_custom', JSON.stringify(list));
+  setMsg('已保存：' + name + '（选关界面可见）');
+}
+function editExport() {
+  const ta = document.getElementById('ioArea');
+  ta.style.display = 'block';
+  ta.value = JSON.stringify(editToLevel(document.getElementById('lvName').value || '未命名'));
+  ta.select();
+  setMsg('已导出到文本框，全选复制即可分享');
+}
+function editImport() {
+  const ta = document.getElementById('ioArea');
+  try {
+    const lv = JSON.parse(ta.value);
+    if (!Array.isArray(lv.tiles) || lv.tiles.length !== N || !lv.white || !lv.black || !lv.wGoal || !lv.bGoal)
+      throw new Error('结构不完整');
+    lv.tiles = lv.tiles.map(row => String(row).padEnd(N, '.').slice(0, N));
+    editData = editFromLevel(lv);
+    document.getElementById('lvName').value = lv.name || '';
+    state = editPreviewState(); sync3D.rebuild();
+    setMsg('导入成功：' + (lv.name || '未命名'));
+  } catch (err) { setMsg('导入失败：JSON 格式或结构不正确'); }
+}
+
+/* ===================== 界面流程：主菜单 / 选关 / 游玩 ===================== */
+let screen = 'menu';   // 'menu' | 'select' | 'game'
+const settings = Object.assign({ shadows: true, autoRotate: true },
+  JSON.parse(localStorage.getItem('bwz_settings') || '{}'));
+function saveSettings() { localStorage.setItem('bwz_settings', JSON.stringify(settings)); }
+function clearRecords() { try { return JSON.parse(localStorage.getItem('bwz_clears') || '{}'); } catch { return {}; } }
+function recordClear(name) {
+  const c = clearRecords(); c[name] = true;
+  localStorage.setItem('bwz_clears', JSON.stringify(c));
+}
+function showScreen(s) {
+  screen = s;
+  closeDrawer();                                  // 切屏自动收起抽屉
+  document.getElementById('menuScreen').style.display = s === 'menu' ? 'flex' : 'none';
+  document.getElementById('selectScreen').style.display = s === 'select' ? 'flex' : 'none';
+  document.getElementById('winOverlay').style.display = 'none';
+  document.getElementById('cornerBtns').style.display = s === 'menu' ? '' : 'none'; // 齿轮/问号只在主菜单
+  updateHudVisibility();
+  // 主菜单/选关背景：镜头后移环绕展示棋盘（仅展示，禁手动拖拽）；进入游玩回正标准视角
+  controls.enabled = s === 'game';               // 只有游玩中允许拖拽/缩放
+  controls.autoRotate = s !== 'game' && settings.autoRotate;
+  controls.autoRotateSpeed = 1.2;
+  if (s !== 'game') resetMenuCamera();
+  if (s === 'select') renderLevelCards();
+  if (s === 'game') resetCamera();
+}
+function updateHudVisibility() {
+  // 游玩画面保持干净：右侧信息只在编辑模式显示
+  document.getElementById('hud').style.display = (screen === 'game' && mode === 'edit') ? '' : 'none';
+}
+const CAM_STD = [0, 20, 10];   // 标准游玩视角（窄视野减小透视变形）
+const CAM_MENU = [0, 34, 17];  // 主菜单/选关背景远景
+function resetCamera() {
+  // 先清掉 OrbitControls 的阻尼残速度（菜单环绕惯性），再精确归位，避免棋盘歪斜
+  controls.enableDamping = false;
+  controls.update();
+  camera.position.set(...CAM_STD);
+  controls.target.set(0, 0, 0);
+  controls.update();
+  controls.enableDamping = true;
+}
+function resetMenuCamera() {
+  controls.enableDamping = false;
+  controls.update();
+  camera.position.set(...CAM_MENU);
+  controls.target.set(0, 0, 1.2);   // 注视点略向近侧偏移，让棋盘视觉中心上移
+  controls.update();
+  controls.enableDamping = true;
+}
+function showHelp() { document.getElementById('helpOverlay').style.display = 'flex'; }
+function hideHelp() { document.getElementById('helpOverlay').style.display = 'none'; }
+function enterEditor() { showScreen('game'); setMode('edit'); }
+function exitEditor() { setMode('play'); resetCamera(); }
+function startSelect() { showScreen('select'); }
+function toSelect() { showScreen('select'); }
+function nextLevel() {
+  const next = builtinIndex + 1;
+  hideWin();
+  if (next < LEVELS.length) { loadBuiltin(next); }
+  else showScreen('select');
+}
+function renderLevelCards() {
+  const el = document.getElementById('levelCards');
+  el.innerHTML = '';
+  const clears = clearRecords();
+  LEVELS.forEach((lv, i) => {
+    const div = document.createElement('div');
+    div.className = 'lvCard';
+    div.innerHTML = `<div class="lvNum">${String(i + 1).padStart(2, '0')}</div>
+      <div class="lvName">${lv.name}</div>
+      <div class="lvClear">${clears[lv.name] ? '✓ 已通关' : ''}</div>`;
+    div.onclick = () => { loadBuiltin(i); showScreen('game'); };
+    el.appendChild(div);
+  });
+  const customs = customLevels();
+  if (customs.length) {
+    customs.forEach((lv, idx) => {
+      const div = document.createElement('div');
+      div.className = 'lvCard';
+      div.innerHTML = `<div class="lvNum" style="font-size:22px">📝</div>
+        <div class="lvName">${lv.name}</div>
+        <div class="lvClear">${clears[lv.name] ? '✓ 已通关' : '自定义'}</div>
+        <button class="small" style="margin-top:6px">✕ 删除</button>`;
+      div.onclick = () => { loadLevelObj(lv); showScreen('game'); };
+      div.querySelector('button').onclick = (e) => {
+        e.stopPropagation();
+        const list = customLevels(); list.splice(idx, 1);
+        localStorage.setItem('bwz_custom', JSON.stringify(list));
+        renderLevelCards();
+      };
+      el.appendChild(div);
+    });
+  }
+}
+function applySettings() {
+  sun.castShadow = settings.shadows;
+  document.querySelectorAll('.toggle[data-key]').forEach(t =>
+    t.classList.toggle('on', !!settings[t.dataset.key]));
+  controls.autoRotate = screen !== 'game' && settings.autoRotate;
+}
+function toggleSetting(key) {
+  settings[key] = !settings[key];
+  saveSettings();
+  applySettings();
+}
+let drawerOpen = false;
+function openDrawer() {
+  if (mode !== 'play') return;   // 编辑模式有独立面板，不开抽屉
+  drawerOpen = true; document.getElementById('drawer').classList.add('open'); document.getElementById('drawerMask').classList.add('open');
+}
+function closeDrawer() { drawerOpen = false; document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerMask').classList.remove('open'); }
+function toggleDrawer() { drawerOpen ? closeDrawer() : openDrawer(); }
+
+/* ===================== 模式与 HUD ===================== */
+function setMode(m) {
+  mode = m;
+  document.getElementById('panelEdit').style.display = m === 'edit' ? '' : 'none';
+  updateHudVisibility();
+  if (m === 'edit') {
+    if (!editData) editData = editFromLevel(LEVELS[0]);
+    state = editPreviewState();
+    sync3D.rebuild();
+    setMsg('编辑模式：选画笔后点击棋盘格子（E 返回游玩）');
+  } else if (m === 'play') {
+    loadLevelObj(currentLevel || LEVELS[builtinIndex]); // 恢复游玩前的关卡
+  }
+}
+let currentLevel = null;
+document.querySelectorAll('#penGrid button').forEach(b => {
+  b.onclick = () => {
+    pen = b.dataset.p;
+    document.querySelectorAll('#penGrid button').forEach(x => x.classList.toggle('on', x === b));
+  };
+});
+
+/* ===================== 调试接口 & 启动 ===================== */
+window.game = {
+  doAction, undo, restart, switchLevel, checkSolvability,
+  editValidate, editPlay, editLoadCurrent, editClear, editSave, editExport, editImport,
+  hideWin, showScreen, startSelect, toSelect, nextLevel, toggleSetting,
+  showHelp, hideHelp, enterEditor, exitEditor, resetCamera,
+  openDrawer, closeDrawer, toggleDrawer,
+  get screen() { return screen; },
+  get state() { return state; }, get won() { return won; }, get mode() { return mode; },
+  get pawnRot() { return { W: pawn3D.W.rotT, B: pawn3D.B.rotT }; },
+  get camPos() { return camera.position.toArray().map(n => Math.round(n * 10) / 10); },
+  LEVELS, solveState, initStateFrom, analyzeSolution, editData: () => editData,
+  setMode,
+};
+
+document.getElementById('loading').remove();
+loadBuiltin(0);
+applySettings();
+showScreen('menu');
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
